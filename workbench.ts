@@ -1,6 +1,6 @@
 import {
   create
-} from "vs/workbench/workbench.web.main";
+} from "vs/workbench/workbench.web.main.internal";
 import { URI, UriComponents } from "vs/base/common/uri";
 import { IWorkbenchConstructionOptions, IWorkspace, IWorkspaceProvider } from "vs/workbench/browser/web.api";
 declare const window: any;
