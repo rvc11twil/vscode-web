@@ -4,8 +4,12 @@
 name: Publish NPM
 
 on:
-  release:
-    types: [created]
+  workflow_dispatch:
+    inputs:
+      vscode_version:
+        description: 'The version of vscode upstream'
+        required: true
+        default: '1.95.3'
 
 jobs:
   build:
@@ -16,6 +20,20 @@ jobs:
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org/
+      - name: Update vscode version for building
+        run: |
+          git config --global pull.rebase false
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          # update version in package.json using sed
+          sed -i "s/\"version\": \"[0-9]\+\.[0-9]\+\.[0-9]\"/\"version\": \"${{ github.event.inputs.vscode_version }}\"/g" package.json
+          # update package-lock.json
+          npm install
+          git add package.json package-lock.json
+          git commit -m "update vscode version to ${{ github.event.inputs.vscode_version }}" || true
+          git tag ${{ github.event.inputs.vscode_version }} || true
+          git push
+          git push --tag
       - name: Setup Build Environment
         run: |
             sudo apt-get update
