@@ -1,0 +1,123 @@
+name: auto_build
+on:
+  workflow_dispatch: 
+  schedule:
+    - cron: '0 23 * * 2-6'
+
+# https://docs.github.com/zh/actions/using-jobs/assigning-permissions-to-jobs
+permissions: write-all
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check_upstream_updates:
+    name: check upstream updates
+    runs-on: ubuntu-latest
+    # https://matthewrich.com/2022/10/13/github-actions-job-output/
+    outputs:
+      tag_updated: ${{ steps.check_tag_updated.outputs.tag_updated }}
+      latest_upstream_tag_name: ${{ steps.check_tag_updated.outputs.latest_upstream_tag_name }}
+      current_tag_name: ${{ steps.check_tag_updated.outputs.current_tag_name }}
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v2
+
+      - name: 'Checkout upstream updates'
+        uses: actions/github-script@v6
+        id: check_tag_updated
+        with:
+          script: |
+            // uncomment the following lines to test in local node env
+            // --------------------
+            // const { Octokit } = require("@octokit/rest");
+            // const core = require('@actions/core');
+            
+            // const github = new Octokit();
+            // const context = github.context;
+            // --------------------          
+
+            function compare_semantic_version(a, b) {
+              const [majorA, minorA, patchA] = a.split('.').map(elem=> parseInt(elem));
+              const [majorB, minorB, patchB] = b.split('.').map(elem=> parseInt(elem));
+              if (majorA > majorB) return 1;
+              if (majorA < majorB) return -1;
+              if (minorA > minorB) return 1;
+              if (minorA < minorB) return -1;
+              if (patchA > patchB) return 1;
+            }
+            
+            async function get_latest_tag_name(owner, repo, tag_priority = true) {
+                let latest_tag_name = '';
+                let latest_tag_name_from_tag = '';
+                let latest_tag_name_from_release = '';
+                try {
+                    // see also https://github.com/oprypin/find-latest-tag
+                    // get the latest tag from the tags
+                    const { data: [latest_tag] } = await github.rest.repos.listTags({ owner, repo })
+                    latest_tag_name_from_tag = latest_tag.name;
+                    console.info(`get tag latest_tag_name: ${latest_tag_name_from_tag}`)
+                } catch (error) {
+                    console.info(`error when get latest_tag_name from tag for ${owner}/${repo}`)
+                }
+                try {
+                    // get the latest tag from the release
+                    const { data: { tag_name } } = await github.rest.repos.getLatestRelease({ owner, repo });
+                    latest_tag_name_from_release = tag_name;
+                    console.info(`get release latest_tag_name: ${latest_tag_name_from_release}`)
+                } catch (error) {
+                    console.info(`error when get latest_tag_name from release for ${owner}/${repo}`)
+                }
+                // default tag priority over release
+                latest_tag_name = latest_tag_name_from_tag || latest_tag_name_from_release;
+                if (!tag_priority) {
+                    latest_tag_name = latest_tag_name_from_release || latest_tag_name_from_tag;
+                }
+                if(!latest_tag_name) {
+                    // failed if tag name couldn't get
+                    core.setFailed(`get_latest_tag_name failed!`);
+                }
+                console.info(`found ${owner}/${repo} latest_tag_name ${latest_tag_name} from ${tag_priority ? 'the tag' : 'the release'}`);
+                return latest_tag_name;
+            }
+            
+            async function check_tag_updated(upstream_owner = 'microsoft', upstream_repo = 'vscode') {
+                // get microsoft/vscode tag name from the tag
+                const latest_upstream_tag_name = await get_latest_tag_name(upstream_owner, upstream_repo, false);
+                const current_tag_name = await get_latest_tag_name(context?.repo.owner || 'liudonghua123', context?.repo.repo || 'vscode-web');
+                const remove_prefix_if_exists = (str, prefix = 'v') => str.startsWith(prefix) ? str.substring(prefix.length) : str;
+                const nomorlized_upstream_tag_name = remove_prefix_if_exists(latest_upstream_tag_name);
+                const tag_updated = (compare_semantic_version(nomorlized_upstream_tag_name, current_tag_name) > 0);
+                return { tag_updated, latest_upstream_tag_name: nomorlized_upstream_tag_name, current_tag_name };
+            }
+            
+            async function main() {
+                const { tag_updated, latest_upstream_tag_name, current_tag_name } = await check_tag_updated();
+                // https://github.com/actions/toolkit/tree/main/packages/core#styling-output
+                core.info(`\u001b[35mtag_updated: ${tag_updated}, latest_upstream_tag_name: ${latest_upstream_tag_name}, current_tag_name: ${current_tag_name}`);
+                // Exporting variables
+                // see also 
+                core.setOutput('tag_updated', tag_updated);
+                core.setOutput('latest_upstream_tag_name', latest_upstream_tag_name);
+                core.setOutput('current_tag_name', current_tag_name);
+                // invoke build action if tag_updated
+                if (!tag_updated) {
+                    core.info('tag not updated, skip trigger build action to run');
+                    return;
+                }
+                // trigger build action to run
+                core.info('trigger build action to run');
+                // TODO: run the npm-publish.yml action via action rest api
+                // github.rest.actions.reRunWorkflow({ owner, repo, workflow_id: 'npm-publish.yml' })
+            }
+            
+            (async () => { await main(); })();
+
+      # https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow
+      - name: Triggering workflow of npm-publish.yml for tag_updated ${{ steps.check_tag_updated.outputs.tag_updated }}        
+        if: steps.check_tag_updated.outputs.tag_updated == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run npm-publish.yml -f vscode_version=${{ steps.check_tag_updated.outputs.latest_upstream_tag_name }}
