@@ -77,7 +77,7 @@ fs.copyFileSync(
 
 // Compile
 note("starting compile");
-exec("npm run gulp vscode-web-min", { stdio: "inherit" });
+exec("npm run gulp vscode-web", { stdio: "inherit" });
 ok("compile completed");
 
 // Extract compiled files
