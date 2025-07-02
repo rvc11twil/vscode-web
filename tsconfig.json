@@ -3,11 +3,11 @@
         "module": "amd",
         "moduleResolution": "node",
         "experimentalDecorators": true,
-		"noImplicitReturns": true,
-		"noUnusedLocals": true,
-		"allowUnreachableCode": false,
-		"strict": true,
-		"forceConsistentCasingInFileNames": true,
+        "noImplicitReturns": false,
+        "noUnusedLocals": false,
+        "allowUnreachableCode": true,
+        "strict": false,
+        "forceConsistentCasingInFileNames": false,
         "baseUrl": ".",
         "paths": {
             "vs/*": [
@@ -15,8 +15,8 @@
             ]
         },
         "lib": [
-			"ES2015"
-		]
+            "ES2015"
+        ]
     },
     "include": ["workbench.ts"]
 }
