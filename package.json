@@ -1,6 +1,6 @@
 {
   "name": "@rvc11/vscode-web",
-  "version": "1.106.3",
+  "version": "1.107.0",
   "description": "Visual Studio Code for browser",
   "files": [
     "dist"
